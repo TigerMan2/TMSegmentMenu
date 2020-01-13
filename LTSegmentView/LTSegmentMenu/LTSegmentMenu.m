@@ -7,341 +7,484 @@
 //
 
 #import "LTSegmentMenu.h"
+#import "LTScrollView.h"
+#import "UIView+LTFrame.h"
 
-@interface LTSegmentMenu ()<UIScrollViewDelegate>
-{
-    CGFloat _currentWidth;
-    NSUInteger _currentIndex;
-    NSUInteger _oldIndex;
-}
-@property (nonatomic, strong) NSArray *titles;
-@property (nonatomic, strong) NSMutableArray *titleViews;
-@property (nonatomic, strong) NSMutableArray *titleViewWidths;
-@property (nonatomic, strong) UIScrollView *scrollView;
-@property (nonatomic, strong) UIView *scrollLine;
+#define kLTSegmentCoverMarginX 5
+#define kLTSegmentCoverMarginW 10
+
+@interface LTSegmentMenu ()
+/// line指示器
+@property (nonatomic, strong) UIView *lineView;
+/// 蒙层
+@property (nonatomic, strong) UIView *converView;
+/// ScrollView
+@property (nonatomic, strong) LTScrollView *scrollView;
+/// 底部线条
+@property (nonatomic, strong) UIView *bottomLine;
+/// 配置信息
 @property (nonatomic, strong) LTSegmentStyle *segmentStyle;
+/// 代理
 @property (nonatomic, weak) id <LTSegmentMenuDelegate> delegate;
+/// 上次index
+@property (nonatomic, assign) NSInteger lastIndex;
+/// 当前index
+@property (nonatomic, assign) NSInteger currentIndex;
+/// items
+@property (nonatomic, strong) NSMutableArray<UIButton *> *itemsArrayM;
+/// item宽度
+@property (nonatomic, strong) NSMutableArray *itemsWidthArrayM;
+
 @end
 
 @implementation LTSegmentMenu
 
-static CGFloat const xGap = 5.0;
-static CGFloat const wGap = 2 * xGap;
-static CGFloat const contentSizeXoffset = 20.0;
-
-- (instancetype)initWithFrame:(CGRect)frame titles:(NSArray *)titles segmentStyle:(LTSegmentStyle *)segmentStyle delegate:(id<LTSegmentMenuDelegate>)delegate
+#pragma mark  Init
++ (instancetype)menuViewWithFrame:(CGRect)frame
+                       titles:(NSMutableArray *)titles
+                 segmentStyle:(LTSegmentStyle *)segmentStyle
+                     delegate:(id<LTSegmentMenuDelegate>)delegate
+                 currentIndex:(NSInteger)currentIndex
 {
-    self = [super initWithFrame:frame];
-    if (self) {
-        self.titles = titles;
-        self.delegate = delegate;
-        self.segmentStyle = segmentStyle;
-        [self initValue];
-        [self setupSubviews];
-        [self setupUI];
-    }
-    return self;
+    frame.size.height = segmentStyle.menuHeight;
+    frame.size.width = segmentStyle.menuWidth;
+    
+    LTSegmentMenu *menu = [[LTSegmentMenu alloc] initWithFrame:frame];
+    menu.titles = titles;
+    menu.segmentStyle = segmentStyle;
+    menu.delegate = delegate;
+    menu.currentIndex = currentIndex;
+    menu.itemsArrayM = @[].mutableCopy;
+    menu.itemsWidthArrayM = @[].mutableCopy;
+    [menu setupSubviews];
+    return menu;
 }
 
-- (void)initValue {
-    _currentIndex = 0;
-    _oldIndex = 0;
-    _currentWidth = self.width;
-}
-
+#pragma mark  Private
 - (void)setupSubviews {
-    [self addSubview:self.scrollView];
-    [self.scrollView addSubview:self.scrollLine];
-    [self setupTitles];
+    self.backgroundColor = self.segmentStyle.scrollViewBackgroundColor;
+    [self setupItems];
+    [self setupOtherViews];
 }
 
-- (void)setupTitles {
-    if (self.titles.count == 0) return;
-    
-    NSInteger index = 0;
-    for (NSString *title in self.titles) {
-        LTSegmentTitleView *titleView = [[LTSegmentTitleView alloc] init];
-        titleView.tag = index;
-        
-        titleView.font = self.segmentStyle.titleFont;
-        titleView.text = title;
-        titleView.textColor = self.segmentStyle.normalTitleColor;
-        titleView.imagePosition = self.segmentStyle.imagePosition;
-        
-        if (self.delegate && [self.delegate respondsToSelector:@selector(setupTitleView:selectedIndex:)]) {
-            [self.delegate setupTitleView:titleView selectedIndex:index];
-        }
-        
-        UITapGestureRecognizer *tapGes = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(titleLabelOnClick:)];
-        [titleView addGestureRecognizer:tapGes];
-        
-        CGFloat titleViewWidth = [titleView titleViewWidth];
-        
-        [self.titleViewWidths addObject:@(titleViewWidth)];
-        [self.scrollView addSubview:titleView];
-        [self.titleViews addObject:titleView];
-        
-        index ++;
-    }
-}
-
-- (void)setupUI {
-    
-    if (self.titles.count==0) return;
-    
-    self.scrollView.frame = CGRectMake(0.0, 0.0, self.width, self.height);
-    //标题
-    [self setupTitleViewsPosition];
-    //滚动条
-    [self setupScrollLine];
-    
-    if (self.segmentStyle.isScrollTitle) { // 设置滚动区域
-        LTSegmentTitleView *lastTitleView = (LTSegmentTitleView *)self.titleViews.lastObject;
-        
-        if (lastTitleView) {
-            self.scrollView.contentSize = CGSizeMake(CGRectGetMaxX(lastTitleView.frame) + contentSizeXoffset, 0.0);
-        }
-    }
-}
-
-
-- (void)setupTitleViewsPosition {
-    CGFloat titleX = 0.0;
-    CGFloat titleY = 0.0;
-    CGFloat titleW = 0.0;
-    CGFloat titleH = self.height - self.segmentStyle.scrollLineHeight;
-    if (!self.segmentStyle.scrollTitle) {
-        //标题不能滚动 平分
-        titleW = self.scrollView.bounds.size.width / self.titles.count;
-        NSInteger index = 0;
-        for (LTSegmentTitleView *titleView in self.titleViews) {
-            titleX = index * titleW;
-            titleView.frame = CGRectMake(titleX, titleY, titleW, titleH);
-            [titleView adjustsubviewsFrame];
-            index ++;
-        }
+- (void)setupItems {
+    if (self.segmentStyle.buttonArray.count > 0 && self.titles.count == self.segmentStyle.buttonArray.count) {
+        [self.segmentStyle.buttonArray enumerateObjectsUsingBlock:^(UIButton * _Nonnull itemButton, NSUInteger idx, BOOL * _Nonnull stop) {
+            [self setupButton:itemButton title:self.titles[idx] idx:idx];
+        }];
     } else {
-        NSInteger index = 0;
-        CGFloat lastLabelMaxX = self.segmentStyle.titleMargin;
-        CGFloat addMargin = 0.0;
-        if (self.segmentStyle.isAutoAdjustTitlesWidth) {
-            
-            float allTitlesWidth = self.segmentStyle.titleMargin;
-            for (int i = 0; i<self.titleViewWidths.count; i++) {
-                allTitlesWidth = allTitlesWidth + [self.titleViewWidths[i] floatValue] + self.segmentStyle.titleMargin;
-            }
-            
-            
-            addMargin = allTitlesWidth < self.scrollView.bounds.size.width ? (self.scrollView.bounds.size.width - allTitlesWidth)/self.titleViewWidths.count : 0 ;
-        }
-        
-        for (LTSegmentTitleView *titleView in self.titleViews) {
-            titleW = [self.titleViewWidths[index] floatValue];
-            titleX = lastLabelMaxX + addMargin/2;
-            
-            lastLabelMaxX += (titleW + addMargin + self.segmentStyle.titleMargin);
-            titleView.frame = CGRectMake(titleX, titleY, titleW, titleH);
-            [titleView adjustsubviewsFrame];
-            
-            index ++;
-        }
-        
+        [self.titles enumerateObjectsUsingBlock:^(id  _Nonnull title, NSUInteger idx, BOOL * _Nonnull stop) {
+            UIButton *itemButton = [UIButton buttonWithType:UIButtonTypeCustom];
+            [self setupButton:itemButton title:title idx:idx];
+        }];
     }
-    
-    LTSegmentTitleView *currentView = (LTSegmentTitleView *)self.titleViews[_currentIndex];
-    if (currentView) {
-        /** 设置初始状态的文字 */
-        currentView.textColor = self.segmentStyle.selectedTitleColor;
-        currentView.selected = YES;
-    }
-    
 }
 
-- (void)setupScrollLine {
+- (void)setupButton:(UIButton *)itemButton title:(NSString *)title idx:(NSInteger)idx {
+    itemButton.titleLabel.font = self.segmentStyle.selectedItemFont;
+    [itemButton setTitleColor:self.segmentStyle.normalItemColor forState:UIControlStateNormal];
+    [itemButton setTitle:title forState:UIControlStateNormal];
+    itemButton.tag = idx;
+    [itemButton addTarget:self action:@selector(itemButtonOnClick:) forControlEvents:UIControlEventTouchUpInside];
+    [itemButton sizeToFit];
+    [self.itemsWidthArrayM addObject:@(itemButton.width)];
+    [self.itemsArrayM addObject:itemButton];
+    [self.scrollView addSubview:itemButton];
+}
+
+- (void)setupOtherViews {
+    self.scrollView.frame = CGRectMake(0, 0, self.segmentStyle.showAddButton ? self.width - self.height : self.width, self.height);
+    [self addSubview:self.scrollView];
+    if (self.segmentStyle.showAddButton) {
+        self.addButton.frame = CGRectMake(0, 0, self.width - self.height, self.height);
+        [self addSubview:self.addButton];
+    }
     
-    LTSegmentTitleView *firstTitleView = self.titleViews[0];
+    /// item
+    __block CGFloat itemX = 0;
+    __block CGFloat itemY = 0;
+    __block CGFloat itemW = 0;
+    __block CGFloat itemH = self.height - self.segmentStyle.lineHeight;
     
-    CGFloat coverX = firstTitleView.x;
-    CGFloat coverW = firstTitleView.width;
-    //滚动条
-    if (self.scrollLine) {
-        if (self.segmentStyle.isScrollTitle) {
-            self.scrollLine.frame = CGRectMake(coverX, self.height - self.segmentStyle.scrollLineHeight, coverW, self.segmentStyle.scrollLineHeight);
+    [self.itemsArrayM enumerateObjectsUsingBlock:^(UIButton * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if (idx == 0) {
+            itemX += self.segmentStyle.itemLeftAndRightMargin;
         } else {
-            if (self.segmentStyle.isAdjustCoverOrLineWidth) {
-                coverW = [self.titleViewWidths[_currentIndex] floatValue] + wGap;
-                coverX = (firstTitleView.width - coverW) * 0.5;
-            }
-            self.scrollLine.frame = CGRectMake(coverX, self.height - self.segmentStyle.scrollLineHeight, coverW, self.segmentStyle.scrollLineHeight);
+            itemX += self.segmentStyle.itemMargin + [self.itemsWidthArrayM[idx - 1] floatValue];
         }
-    }
-}
-
-#pragma mark - button action
-- (void)titleLabelOnClick:(UITapGestureRecognizer *)tapGes {
-    LTSegmentTitleView *currentLabel = (LTSegmentTitleView *)tapGes.view;
-    
-    if (!currentLabel) {
-        return;
-    }
-    
-    _currentIndex = currentLabel.tag;
-    
-    [self adjustUIWhenBtnOnClickWithAnimate:YES taped:YES];
-}
-
-#pragma mark - public helper
-- (void)adjustUIWhenBtnOnClickWithAnimate:(BOOL)animated taped:(BOOL)taped {
-    
-    if (_currentIndex == _oldIndex && taped) return;
-    
-    LTSegmentTitleView *currentTitleView = (LTSegmentTitleView *)self.titleViews[_currentIndex];
-    LTSegmentTitleView *oldTitleView = (LTSegmentTitleView *)self.titleViews[_oldIndex];
-    
-    CGFloat animatedTime = animated ? 0.30 : 0;
-    
-    __weak typeof(self) weakSelf = self;
-    
-    [UIView animateWithDuration:animatedTime animations:^{
-        /** 文字选中和未选中更换 */
-        oldTitleView.textColor = weakSelf.segmentStyle.normalTitleColor;
-        currentTitleView.textColor = weakSelf.segmentStyle.selectedTitleColor;
-        /** 标题选中和未选中更换 */
-        oldTitleView.selected = NO;
-        currentTitleView.selected = YES;
-        
-        //滚动条
-        if (weakSelf.scrollLine) {
-            if (weakSelf.segmentStyle.isScrollTitle) {
-                weakSelf.scrollLine.x = currentTitleView.x;
-                weakSelf.scrollLine.width = currentTitleView.width;
-            } else {
-                if (weakSelf.segmentStyle.isAdjustCoverOrLineWidth) {
-                    CGFloat scrollLineW = [weakSelf.titleViewWidths[self->_currentIndex] floatValue] + wGap;
-                    CGFloat scrollLineX = currentTitleView.x + (currentTitleView.width - scrollLineW)*0.5;
-                    weakSelf.scrollLine.x = scrollLineX;
-                    weakSelf.scrollLine.width = scrollLineW;
-                } else {
-                    weakSelf.scrollLine.x = currentTitleView.x;
-                    weakSelf.scrollLine.width = currentTitleView.width;
-                }
-            }
-        }
-    } completion:^(BOOL finished) {
-        [self adjustTitleOffsetToCurrentIndex:self->_currentIndex];
+        obj.frame = CGRectMake(itemX, itemY, [self.itemsWidthArrayM[idx] floatValue], itemH);
     }];
     
-    /** 覆盖数据 */
-    if (self.delegate && [self.delegate respondsToSelector:@selector(segmentView:oldTitleView:currentTitleView:oldIndex:currentIndex:)]) {
-        [self.delegate segmentView:self oldTitleView:oldTitleView currentTitleView:currentTitleView oldIndex:_oldIndex currentIndex:_currentIndex];
-    }
-    _oldIndex = _currentIndex;
-}
-
-- (void)adjustTitleOffsetToCurrentIndex:(NSInteger)currentIndex {
-    _oldIndex = currentIndex;
-    int index = 0;
-    for (LTSegmentTitleView *titleView in self.titleViews) {
-        if (index != currentIndex) {
-            titleView.textColor = self.segmentStyle.normalTitleColor;
-            titleView.selected = NO;
+    CGFloat scrollSizeWidth = self.segmentStyle.itemLeftAndRightMargin + CGRectGetMaxX([self.itemsArrayM lastObject].frame);
+    if (scrollSizeWidth < self.scrollView.width) {
+        // 未超出宽度
+        itemX = 0;
+        itemY = 0;
+        itemW = 0;
+        CGFloat leftMargin = 0;
+        for (NSNumber *width in self.itemsWidthArrayM) {
+            leftMargin += [width floatValue];
+        }
+        
+        leftMargin = (self.scrollView.width - leftMargin - self.segmentStyle.itemMargin * (self.itemsArrayM.count - 1)) * 0.5;
+        
+        if (self.segmentStyle.aligmentModeCenter && leftMargin >= 0) {
+            // 居中且剩余间距
+            [self.itemsArrayM enumerateObjectsUsingBlock:^(UIButton * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                if (idx == 0) {
+                    itemX += leftMargin;
+                } else {
+                    itemX += [self.itemsWidthArrayM[idx - 1] floatValue] + self.segmentStyle.itemMargin;
+                }
+                obj.frame = CGRectMake(itemX, itemY, [self.itemsWidthArrayM[idx] floatValue], itemH);
+            }];
+            
+            self.scrollView.contentSize = CGSizeMake(leftMargin + CGRectGetMaxX([self.itemsArrayM lastObject].frame), self.scrollView.height);
+            
         } else {
-            titleView.textColor = self.segmentStyle.selectedTitleColor;
-            titleView.selected = YES;
+            if (!self.segmentStyle.scrollMenu) {
+                // 不能滚动则平分
+                [self.itemsArrayM enumerateObjectsUsingBlock:^(UIButton * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+                    itemW = self.scrollView.width / self.itemsArrayM.count;
+                    itemX = itemW * idx;
+                    obj.frame = CGRectMake(itemX, itemY, itemW, itemH);
+                }];
+                
+                self.scrollView.contentSize = CGSizeMake(CGRectGetMaxX([self.itemsArrayM lastObject].frame), self.scrollView.height);
+            } else {
+                self.scrollView.contentSize = CGSizeMake(scrollSizeWidth, self.scrollView.height);
+            }
         }
-        
-        index ++;
+    } else {
+        // 超出scrollView宽度
+        self.scrollView.contentSize = CGSizeMake(scrollSizeWidth, self.scrollView.height);
     }
     
-    if (self.scrollView.contentSize.width != self.scrollView.bounds.size.width + contentSizeXoffset) {//需要滚动
-        LTSegmentTitleView *currentTitleView = (LTSegmentTitleView *)self.titleViews[currentIndex];
-        
-        CGFloat offSetx = currentTitleView.center.x - _currentWidth * 0.5;
-        if (offSetx < 0) {
-            offSetx = 0;
-        }
-        
-        CGFloat maxOffSetX = self.scrollView.contentSize.width - _currentWidth;
-        if (maxOffSetX < 0) {
-            maxOffSetX = 0;
-        }
-        
-        if (offSetx > maxOffSetX) {
-            offSetx = maxOffSetX;
-        }
-        
-        [self.scrollView setContentOffset:CGPointMake(offSetx, 0.0) animated:YES];
-        
+    CGFloat lineX = [(UIButton *)[self.itemsArrayM firstObject] x];
+    CGFloat lineY = self.scrollView.height - self.segmentStyle.lineHeight;
+    CGFloat lineW = [(UIButton *)[self.itemsArrayM firstObject] width];
+    CGFloat lineH = self.segmentStyle.lineHeight;
+    
+    ///处理Line宽度等于字体宽度
+    if (!self.segmentStyle.scrollMenu &&
+        !self.segmentStyle.aligmentModeCenter &&
+        self.segmentStyle.lineWidthEqualFontWidth) {
+        lineX = [(UIButton *)[self.itemsArrayM firstObject] x] + ([(UIButton *)[self.itemsArrayM firstObject] width] - ([[self.itemsWidthArrayM firstObject] floatValue])) / 2;
+        lineW = [[self.itemsWidthArrayM firstObject] floatValue];
     }
     
+    /// scrollLine
+    if (self.segmentStyle.showScrollLine) {
+        self.lineView.frame = CGRectMake(lineX - self.segmentStyle.lineLeftAndRightAddWidth + self.segmentStyle.lineLeftAndRightMargin, lineY - self.segmentStyle.lineBottomMargin, lineW + self.segmentStyle.lineLeftAndRightAddWidth * 2 - self.segmentStyle.lineLeftAndRightMargin * 2, lineH);
+        self.lineView.layer.cornerRadius = self.segmentStyle.lineCorner;
+        [self.scrollView addSubview:self.lineView];
+    }
+    
+    ///conver
+    if (self.segmentStyle.showConver) {
+        self.converView.frame = CGRectMake(lineX - kLTSegmentCoverMarginX, (self.scrollView.height - self.segmentStyle.converHeight - self.segmentStyle.lineHeight) * 0.5, lineW + kLTSegmentCoverMarginW, self.segmentStyle.converHeight);
+        [self.scrollView insertSubview:self.converView atIndex:0];
+    }
+    
+    ///bottomLine
+    if (self.segmentStyle.showBottomLine) {
+        self.bottomLine = [[UIView alloc] init];
+        self.bottomLine.backgroundColor = self.segmentStyle.bottomLineColor;
+        self.bottomLine.frame = CGRectMake(self.segmentStyle.bottomLineLeftAndRightMargin, self.height - self.segmentStyle.bottomLineHeight, self.width - self.segmentStyle.bottomLineLeftAndRightMargin * 2, self.segmentStyle.bottomLineHeight);
+        self.bottomLine.layer.cornerRadius = self.segmentStyle.bottomLineCorner;
+        [self insertSubview:self.bottomLine atIndex:0];
+    }
+    
+    if (self.segmentStyle.itemMaxScale > 1) {
+        ((UIButton *)self.itemsArrayM[self.currentIndex]).transform = CGAffineTransformMakeScale(self.segmentStyle.itemMaxScale, self.segmentStyle.itemMaxScale);
+    }
+    [self setDefaultTheme];
+    [self selectedItemIndex:self.currentIndex animated:NO];
 }
 
-- (void)setSelectedIndex:(NSInteger)index animated:(BOOL)animated {
-    NSAssert(index >= 0 && index < self.titles.count, @"设置的下标不合法!!");
-    
-    if (index < 0 || index >= self.titles.count) {
-        return;
+- (void)setDefaultTheme {
+    UIButton *currentButton = self.itemsArrayM[self.currentIndex];
+    // 缩放
+    if (self.segmentStyle.itemMaxScale > 1) {
+        currentButton.transform = CGAffineTransformMakeScale(self.segmentStyle.itemMaxScale, self.segmentStyle.itemMaxScale);
     }
     
-    _currentIndex = index;
-    [self adjustUIWhenBtnOnClickWithAnimate:animated taped:NO];
+    //颜色
+    currentButton.selected = YES;
+    [currentButton setTitleColor:self.segmentStyle.selectedItemColor forState:UIControlStateNormal];
+    [currentButton.titleLabel setFont:self.segmentStyle.selectedItemFont];
+    
+    //线条
+    if (self.segmentStyle.showScrollLine) {
+        self.lineView.x = currentButton.x - self.segmentStyle.lineLeftAndRightAddWidth + self.segmentStyle.lineLeftAndRightMargin;
+        self.lineView.width = currentButton.width + self.segmentStyle.lineLeftAndRightAddWidth * 2 - self.segmentStyle.lineLeftAndRightMargin * 2;
+        //处理Line宽度等于字体宽度
+        if (!self.segmentStyle.scrollMenu &&
+            !self.segmentStyle.aligmentModeCenter &&
+            self.segmentStyle.lineWidthEqualFontWidth) {
+            self.lineView.x = currentButton.x - ([currentButton width] - [self.itemsWidthArrayM[currentButton.tag] floatValue]) / 2 - self.segmentStyle.lineLeftAndRightAddWidth;
+            self.lineView.width = [self.itemsWidthArrayM[currentButton.tag] floatValue] + self.segmentStyle.lineLeftAndRightAddWidth * 2;
+        }
+    }
+    
+    //遮盖
+    if (self.segmentStyle.showConver) {
+        self.converView.x = currentButton.x - kLTSegmentCoverMarginX;
+        self.converView.width = currentButton.width + kLTSegmentCoverMarginW;
+        //处理Conver宽度等于字体宽度
+        if (!self.segmentStyle.scrollMenu &&
+            !self.segmentStyle.aligmentModeCenter &&
+            self.segmentStyle.lineWidthEqualFontWidth) {
+            self.converView.x = currentButton.x + ([currentButton width] - [self.itemsWidthArrayM[currentButton.tag] floatValue]) / 2 - kLTSegmentCoverMarginX;
+            self.converView.width = [self.itemsWidthArrayM[currentButton.tag] floatValue] + kLTSegmentCoverMarginW;
+        }
+    }
+    self.lastIndex = self.currentIndex;
 }
 
-- (void)reloadTitlesWithNewTitles:(NSArray *)titles {
+- (void)adjustItemAnimate:(BOOL)animated {
+    UIButton *lastButton = self.itemsArrayM[self.lastIndex];
+    UIButton *currentButton = self.itemsArrayM[self.currentIndex];
+    [UIView animateWithDuration:animated ? 0.3 : 0 animations:^{
+        //缩放
+        if (self.segmentStyle.itemMaxScale > 1) {
+            lastButton.transform = CGAffineTransformMakeScale(1, 1);
+            currentButton.transform = CGAffineTransformMakeScale(self.segmentStyle.itemMaxScale, self.segmentStyle.itemMaxScale);
+        }
+        //颜色
+        lastButton.selected = NO;
+        currentButton.selected = YES;
+        [lastButton setTitleColor:self.segmentStyle.normalItemColor forState:UIControlStateNormal];
+        [currentButton setTitleColor:self.segmentStyle.selectedItemColor forState:UIControlStateNormal];
+        lastButton.titleLabel.font = self.segmentStyle.itemFont;
+        currentButton.titleLabel.font = self.segmentStyle.selectedItemFont;
+        
+        //线条
+        if (self.segmentStyle.showScrollLine) {
+            self.lineView.x = currentButton.x - self.segmentStyle.lineLeftAndRightAddWidth + self.segmentStyle.lineLeftAndRightMargin;
+            self.lineView.width = currentButton.width + self.segmentStyle.lineLeftAndRightAddWidth * 2 - self.segmentStyle.lineLeftAndRightMargin * 2;
+            //处理Line宽度等于字体宽度
+            if (!self.segmentStyle.scrollMenu &&
+                !self.segmentStyle.aligmentModeCenter &&
+                self.segmentStyle.lineWidthEqualFontWidth) {
+                self.lineView.x = currentButton.x + ([currentButton width] - [self.itemsWidthArrayM[currentButton.tag] floatValue]) / 2 - self.segmentStyle.lineLeftAndRightAddWidth;
+                self.lineView.width = [self.itemsWidthArrayM[currentButton.tag] floatValue] + self.segmentStyle.lineLeftAndRightAddWidth * 2;
+            }
+        }
+        
+        //遮盖
+        if (self.segmentStyle.showConver) {
+            self.converView.x = currentButton.x - kLTSegmentCoverMarginX;
+            self.converView.width = currentButton.width + kLTSegmentCoverMarginW;
+            //处理Conver宽度等于字体宽度
+            if (!self.segmentStyle.scrollMenu &&
+                !self.segmentStyle.aligmentModeCenter &&
+                self.segmentStyle.lineWidthEqualFontWidth) {
+                self.converView.x = currentButton.x + ([currentButton width] - [self.itemsWidthArrayM[currentButton.tag] floatValue]) / 2 - kLTSegmentCoverMarginX;
+                self.converView.width = [self.itemsWidthArrayM[currentButton.tag] floatValue] + kLTSegmentCoverMarginW;
+            }
+        }
+        self.lastIndex = self.currentIndex;
+    } completion:^(BOOL finished) {
+        [self adjustItemPositionWidthCurrentIndex:self.currentIndex];
+    }];
+}
+
+#pragma mark  public
+- (void)updateTitle:(NSString *)title index:(NSInteger)index {
+    if (index < 0 || index > self.itemsArrayM.count - 1) return;
+    if (title.length <= 0) return;
+    [self reloadView];
+}
+
+- (void)updateTitles:(NSArray *)titles {
+    if (titles.count != self.itemsArrayM.count) return;
+    [self reloadView];
+}
+
+- (void)adjustItemPositionWidthCurrentIndex:(NSInteger)index {
+    if (self.scrollView.contentSize.width != self.scrollView.width + 20) {
+        UIButton *curButton = self.itemsArrayM[index];
+        CGFloat offset = curButton.center.x - self.scrollView.width * 0.5;
+        offset = offset > 0 ? offset : 0;
+        CGFloat maxOffset = self.scrollView.contentSize.width - self.scrollView.width;
+        maxOffset = maxOffset > 0 ? maxOffset : 0;
+        offset = offset > maxOffset ? maxOffset : offset;
+        [self.scrollView setContentOffset:CGPointMake(offset, 0) animated:YES];
+    }
+}
+
+- (void)adjustItemWidthProgress:(CGFloat)progress
+                      lastIndex:(NSInteger)lastIndex
+                   currentIndex:(NSInteger)currentIndex {
+    self.lastIndex = lastIndex;
+    self.currentIndex = currentIndex;
+    if (lastIndex == currentIndex) return;
+    
+    UIButton *lastButton = self.itemsArrayM[self.lastIndex];
+    UIButton *currentButton = self.itemsArrayM[self.currentIndex];
+    
+    //缩放
+    if (self.segmentStyle.itemMaxScale > 1) {
+        CGFloat scaleN = self.segmentStyle.itemMaxScale - self.segmentStyle.deltaScale * progress;
+        CGFloat scaleS = 1 + self.segmentStyle.deltaScale * progress;
+        lastButton.transform = CGAffineTransformMakeScale(scaleN, scaleN);
+        currentButton.transform = CGAffineTransformMakeScale(scaleS, scaleS);
+    }
+    
+    //颜色渐变
+    if (self.segmentStyle.showGradientColor) {
+        [self.segmentStyle setRGBWithProgress:progress];
+        UIColor *norColor = [UIColor colorWithRed:self.segmentStyle.deltaNorR green:self.segmentStyle.deltaNorG blue:self.segmentStyle.deltaNorB alpha:1];
+        UIColor *selColor = [UIColor colorWithRed:self.segmentStyle.deltaSelR green:self.segmentStyle.deltaSelG blue:self.segmentStyle.deltaSelB alpha:1];
+        [lastButton setTitleColor:norColor forState:UIControlStateNormal];
+        [currentButton setTitleColor:selColor forState:UIControlStateNormal];
+    } else {
+        if (progress > 0.5) {
+            lastButton.selected = NO;
+            currentButton.selected = YES;
+            [lastButton setTitleColor:self.segmentStyle.normalItemColor forState:UIControlStateNormal];
+            [currentButton setTitleColor:self.segmentStyle.selectedItemColor forState:UIControlStateNormal];
+            lastButton.titleLabel.font = self.segmentStyle.itemFont;
+            currentButton.titleLabel.font = self.segmentStyle.selectedItemFont;
+        } else if (progress < 0.5 && progress > 0) {
+            lastButton.selected = YES;
+            currentButton.selected = NO;
+            [lastButton setTitleColor:self.segmentStyle.selectedItemColor forState:UIControlStateNormal];
+            [currentButton setTitleColor:self.segmentStyle.normalItemColor forState:UIControlStateNormal];
+            lastButton.titleLabel.font = self.segmentStyle.selectedItemFont;
+            currentButton.titleLabel.font = self.segmentStyle.itemFont;
+        }
+    }
+    
+    if (progress > 0.5) {
+        lastButton.titleLabel.font = self.segmentStyle.itemFont;
+        currentButton.titleLabel.font = self.segmentStyle.selectedItemFont;
+    } else if (progress < 0.5 && progress > 0) {
+        lastButton.titleLabel.font = self.segmentStyle.selectedItemFont;
+        currentButton.titleLabel.font = self.segmentStyle.itemFont;
+    }
+    
+    CGFloat xD = 0;
+    CGFloat wD = 0;
+    if (!self.segmentStyle.scrollMenu &&
+        !self.segmentStyle.aligmentModeCenter &&
+        self.segmentStyle.lineWidthEqualFontWidth) {
+        xD = currentButton.titleLabel.x + currentButton.x - (lastButton.titleLabel.x + lastButton.x);
+        wD = currentButton.titleLabel.width - lastButton.titleLabel.width;
+    } else {
+        xD = currentButton.x - lastButton.x;
+        wD = currentButton.width - lastButton.width;
+    }
+    
+    //线条
+    if (self.segmentStyle.showScrollLine) {
+        ///处理Line宽度等于字体宽度
+        if (!self.segmentStyle.scrollMenu &&
+            !self.segmentStyle.aligmentModeCenter &&
+            self.segmentStyle.lineWidthEqualFontWidth) {
+            self.lineView.x = lastButton.x + ([lastButton width] - [self.itemsWidthArrayM[lastButton.tag] floatValue])/2 + self.segmentStyle.lineLeftAndRightAddWidth + xD * progress;
+            self.lineView.width = [self.itemsWidthArrayM[lastButton.tag] floatValue] + self.segmentStyle.lineLeftAndRightAddWidth + wD * progress;
+        } else {
+            self.lineView.x = lastButton.x + xD * progress - self.segmentStyle.lineLeftAndRightAddWidth + self.segmentStyle.lineLeftAndRightMargin;
+            self.lineView.width = lastButton.width + wD * progress + self.segmentStyle.lineLeftAndRightAddWidth * 2 - self.segmentStyle.lineLeftAndRightMargin * 2;
+        }
+    }
+    
+    ///遮盖
+    if (self.segmentStyle.showConver) {
+        self.converView.x = lastButton.x + xD * progress - kLTSegmentCoverMarginX;
+        self.converView.width = lastButton.width + wD * progress + kLTSegmentCoverMarginW;
+        //处理Conver宽度等于字体宽度
+        if (!self.segmentStyle.scrollMenu &&
+            !self.segmentStyle.aligmentModeCenter &&
+            self.segmentStyle.lineWidthEqualFontWidth) {
+            self.converView.x = currentButton.x + ([currentButton width] - [self.itemsWidthArrayM[currentButton.tag] floatValue]) / 2 - kLTSegmentCoverMarginX + xD * progress;
+            self.converView.width = [self.itemsWidthArrayM[currentButton.tag] floatValue] + kLTSegmentCoverMarginW + wD * progress;
+        }
+    }
+}
+
+- (void)selectedItemIndex:(NSInteger)index
+                 animated:(BOOL)animated {
+    self.currentIndex = index;
+    [self adjustItemAnimate:animated];
+}
+
+- (void)adjustItemWithAnimated:(BOOL)animated {
+    if (self.lastIndex == self.currentIndex) return;
+    [self adjustItemAnimate:animated];
+}
+
+- (void)reloadView {
+    ///重置数据
+    [self.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
     [self.scrollView.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    [self.itemsArrayM removeAllObjects];
+    [self.itemsWidthArrayM removeAllObjects];
     
-    _currentIndex = 0;
-    _oldIndex = 0;
-    self.titleViewWidths = nil;
-    self.titleViews = nil;
-    self.titles = nil;
-    self.titles = [titles copy];
-    if (self.titles.count == 0) return;
-    for (UIView *subview in self.subviews) {
-        [subview removeFromSuperview];
-    }
     [self setupSubviews];
-    [self setupUI];
-    [self setSelectedIndex:0 animated:YES];
-    
 }
 
-#pragma mark - getter
-- (UIView *)scrollLine {
-    if (!_scrollLine) {
-        UIView *lineView = [[UIView alloc] init];
-        lineView.backgroundColor = self.segmentStyle.scrollLineColor;
-        _scrollLine = lineView;
+#pragma mark  getter
+- (UIView *)lineView {
+    if (!_lineView) {
+        _lineView = [[UIView alloc] init];
+        _lineView.backgroundColor = self.segmentStyle.lineColor;
     }
-    
-    return _scrollLine;
+    return _lineView;
 }
 
-- (UIScrollView *)scrollView {
+- (UIView *)converView {
+    if (!_converView) {
+        _converView = [[UIView alloc] init];
+        _converView.layer.backgroundColor = self.segmentStyle.coverColor.CGColor;
+        _converView.layer.cornerRadius = self.segmentStyle.coverCornerRadius;
+        _converView.layer.masksToBounds = YES;
+        _converView.userInteractionEnabled = NO;
+    }
+    return _converView;
+}
+
+- (LTScrollView *)scrollView {
     if (!_scrollView) {
-        UIScrollView *scrollView = [[UIScrollView alloc] init];
-        scrollView.showsVerticalScrollIndicator = NO;
-        scrollView.showsHorizontalScrollIndicator = NO;
-        scrollView.delegate = self;
-        scrollView.pagingEnabled = NO;
-        scrollView.scrollsToTop = NO;
-        _scrollView = scrollView;
+        _scrollView = [[LTScrollView alloc] init];
+        _scrollView.pagingEnabled = NO;
+        _scrollView.bounces = self.segmentStyle.bounces;
+        _scrollView.showsVerticalScrollIndicator = NO;
+        _scrollView.showsHorizontalScrollIndicator = NO;
+        _scrollView.scrollEnabled = self.segmentStyle.scrollMenu;
     }
     return _scrollView;
 }
 
-- (NSMutableArray *)titleViews {
-    if (!_titleViews) {
-        _titleViews = [NSMutableArray array];
+- (UIButton *)addButton {
+    if (!_addButton) {
+        _addButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        [_addButton setBackgroundImage:[UIImage imageNamed:self.segmentStyle.addButtonNormalImageName] forState:UIControlStateNormal];
+        [_addButton setBackgroundImage:[UIImage imageNamed:self.segmentStyle.addButtonHightImageName] forState:UIControlStateHighlighted];
+        _addButton.layer.shadowColor = [UIColor grayColor].CGColor;
+        _addButton.layer.shadowOffset = CGSizeMake(-1, 0);
+        _addButton.layer.shadowOpacity = 0.5;
+        _addButton.backgroundColor = self.segmentStyle.addButtonBackgroundColor;
+        [_addButton addTarget:self action:@selector(addButtonOnClick:) forControlEvents:UIControlEventTouchUpInside];
     }
-    return _titleViews;
+    return _addButton;
 }
 
-- (NSMutableArray *)titleViewWidths {
-    if (!_titleViewWidths) {
-        _titleViewWidths = [NSMutableArray array];
+#pragma mark  click
+- (void)itemButtonOnClick:(UIButton *)sender {
+    self.currentIndex = sender.tag;
+    [self adjustItemWithAnimated:YES];
+    if (self.delegate && [self.delegate respondsToSelector:@selector(menuItemOnClick:index:)]) {
+        [self.delegate menuItemOnClick:sender index:self.currentIndex];
     }
-    return _titleViewWidths;
+}
+
+- (void)addButtonOnClick:(UIButton *)sender {
+    if (self.delegate && [self.delegate respondsToSelector:@selector(menuAddButtonOnClick:)]) {
+        [self.delegate menuAddButtonOnClick:sender];
+    }
 }
 
 @end

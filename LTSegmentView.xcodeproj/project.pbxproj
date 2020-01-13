@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AA052228233B34C40030ECA0 /* LTSegmentTitleView.m in Sources */ = {isa = PBXBuildFile; fileRef = AA052223233B34C40030ECA0 /* LTSegmentTitleView.m */; };
 		AA052229233B34C40030ECA0 /* LTSegmentStyle.m in Sources */ = {isa = PBXBuildFile; fileRef = AA052225233B34C40030ECA0 /* LTSegmentStyle.m */; };
 		AA05222A233B34C40030ECA0 /* LTSegmentMenu.m in Sources */ = {isa = PBXBuildFile; fileRef = AA052227233B34C40030ECA0 /* LTSegmentMenu.m */; };
+		AAD9BAFD23CC0A0A00F0C088 /* LTScrollView.m in Sources */ = {isa = PBXBuildFile; fileRef = AAD9BAFC23CC0A0A00F0C088 /* LTScrollView.m */; };
 		AAF577C42339EE300077E210 /* AppDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = AAF577C32339EE300077E210 /* AppDelegate.m */; };
 		AAF577C72339EE300077E210 /* SceneDelegate.m in Sources */ = {isa = PBXBuildFile; fileRef = AAF577C62339EE300077E210 /* SceneDelegate.m */; };
 		AAF577CA2339EE300077E210 /* ViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = AAF577C92339EE300077E210 /* ViewController.m */; };
@@ -41,11 +41,11 @@
 
 /* Begin PBXFileReference section */
 		AA052222233B34C40030ECA0 /* LTSegmentStyle.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = LTSegmentStyle.h; sourceTree = "<group>"; };
-		AA052223233B34C40030ECA0 /* LTSegmentTitleView.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = LTSegmentTitleView.m; sourceTree = "<group>"; };
 		AA052224233B34C40030ECA0 /* LTSegmentMenu.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = LTSegmentMenu.h; sourceTree = "<group>"; };
 		AA052225233B34C40030ECA0 /* LTSegmentStyle.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = LTSegmentStyle.m; sourceTree = "<group>"; };
-		AA052226233B34C40030ECA0 /* LTSegmentTitleView.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = LTSegmentTitleView.h; sourceTree = "<group>"; };
 		AA052227233B34C40030ECA0 /* LTSegmentMenu.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = LTSegmentMenu.m; sourceTree = "<group>"; };
+		AAD9BAFB23CC0A0A00F0C088 /* LTScrollView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = LTScrollView.h; sourceTree = "<group>"; };
+		AAD9BAFC23CC0A0A00F0C088 /* LTScrollView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = LTScrollView.m; sourceTree = "<group>"; };
 		AAF577BF2339EE300077E210 /* LTSegmentView.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = LTSegmentView.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AAF577C22339EE300077E210 /* AppDelegate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AppDelegate.h; sourceTree = "<group>"; };
 		AAF577C32339EE300077E210 /* AppDelegate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AppDelegate.m; sourceTree = "<group>"; };
@@ -159,8 +159,8 @@
 				AA052227233B34C40030ECA0 /* LTSegmentMenu.m */,
 				AA052222233B34C40030ECA0 /* LTSegmentStyle.h */,
 				AA052225233B34C40030ECA0 /* LTSegmentStyle.m */,
-				AA052226233B34C40030ECA0 /* LTSegmentTitleView.h */,
-				AA052223233B34C40030ECA0 /* LTSegmentTitleView.m */,
+				AAD9BAFB23CC0A0A00F0C088 /* LTScrollView.h */,
+				AAD9BAFC23CC0A0A00F0C088 /* LTScrollView.m */,
 			);
 			path = LTSegmentMenu;
 			sourceTree = "<group>";
@@ -298,11 +298,11 @@
 				AAF577CA2339EE300077E210 /* ViewController.m in Sources */,
 				AA052229233B34C40030ECA0 /* LTSegmentStyle.m in Sources */,
 				AAF577C42339EE300077E210 /* AppDelegate.m in Sources */,
+				AAD9BAFD23CC0A0A00F0C088 /* LTScrollView.m in Sources */,
 				AAF577D52339EE300077E210 /* main.m in Sources */,
 				AAF578002339F9B10077E210 /* UIView+LTFrame.m in Sources */,
 				AAF577C72339EE300077E210 /* SceneDelegate.m in Sources */,
 				AA05222A233B34C40030ECA0 /* LTSegmentMenu.m in Sources */,
-				AA052228233B34C40030ECA0 /* LTSegmentTitleView.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
